@@ -9,7 +9,7 @@ servers=[
     :hostname => "services." + DOMAIN,
     # :ip => BRIDGE_NET + "150",
     :ip_int => "192.168.99.150",
-    :ram => 1536,
+    :ram => 2048,
     :box => "jhveras/freeipa-server-lab"
   },
   {
@@ -23,7 +23,7 @@ servers=[
     :hostname => "node01." + DOMAIN,
     # :ip => BRIDGE_NET + "152",
     :ip_int => "192.168.99.156",
-    :ram => 1024,
+    :ram => 2048,
     :box => "jhveras/freeipa-node01-lab"
     # :hdd_name => "db1_hdd.vdi",
     # :hdd_size => "10000"
@@ -32,7 +32,7 @@ servers=[
     :hostname => "node02." + DOMAIN,
     # :ip => BRIDGE_NET + "153",
     :ip_int => "192.168.99.157",
-    :ram => 1024,
+    :ram => 2048,
     :box => "jhveras/freeipa-node02-lab"
     # :hdd_name => "db2_hdd.vdi",
     # :hdd_size => "10000"
@@ -50,14 +50,11 @@ Vagrant.configure(2) do |config|
         
         config.vm.define machine[:hostname] do |node|
             
-            node.vm.box = machine[:box]
-            
+            node.vm.box = machine[:box]            
             node.vm.usable_port_range = (2200..2250)
             
-            # node.vm.hostname = machine[:hostname]
-            
-            # node.vm.network "public_network", ip: machine[:ip], bridge: 'Intel(R) Centrino(R) Wireless-N 130'
-            
+            # node.vm.hostname = machine[:hostname]            
+            # node.vm.network "public_network", ip: machine[:ip], bridge: 'Intel(R) Centrino(R) Wireless-N 130'            
             node.vm.network "private_network", ip: machine[:ip_int], virtualbox__intnet: "intnet"
             
             # node.ssh.password = "vagrant"
@@ -66,12 +63,25 @@ Vagrant.configure(2) do |config|
             
                 vb.customize ["modifyvm", :id, "--memory", machine[:ram]]
                 # vb.name = machine[:hostname]                               
-            end          
+            end  
+                
+            if (machine[:hostname] == "services.lab.example.com") then
+              node.vm.provision "shell", inline: <<-SHELL 
+                echo 1 > /proc/sys/net/ipv4/ip_forward
+                echo net.ipv4.ip_forward = 1 > /etc/sysctl.d/ip_forward.conf
+                ip route add default via 10.0.2.2 dev enp0s3
+              SHELL
+            end
         end
         
-        config.vm.provision "shell", inline: <<-SHELL
+        config.vm.provision "shell", inline: <<-SHELL 
+          nmcli connection mod enp0s3 ipv4.ignore-auto-dns yes ipv4.ignore-auto-routes yes      
+          nmcli connection down enp0s3 && nmcli connection up enp0s3
           nmcli connection mod "System enp0s8" con-name enp0s8
-          nmcli connection mod enp0s8 ipv4.dns 192.168.99.150 ipv4.dns-search lab.example.com
+          nmcli connection mod enp0s8 ipv4.dns 192.168.99.150 ipv4.dns-search lab.example.com 
+          if [ `hostname` != "services.lab.example.com" ]; then
+            nmcli connection mod enp0s8 ipv4.gateway 192.168.99.150
+          fi
           nmcli connection down enp0s8; nmcli connection up enp0s8
         SHELL
     end
